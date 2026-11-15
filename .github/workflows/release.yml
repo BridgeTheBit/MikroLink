@@ -83,7 +83,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes autoconf automake libtool make perl jq
+          sudo apt-get install --yes autoconf automake libtool make perl jq gperf
           sdkmanager 'ndk;27.3.13750724'
       - name: Prepare verified native source and OpenSSL libraries
         shell: bash
