@@ -15,6 +15,8 @@ The repository never stores APKs, container archives, keystores, passwords, or d
 
 Never commit the keystore or put any of these values in an issue, workflow, manifest, or chat message.
 
+The release workflow reads these values only from GitHub Actions Secrets; the keystore file is never uploaded to the repository or attached to a release.
+
 ## Publish a version
 
 Run all checks on `main`, then create and push an annotated semantic-version tag:
@@ -58,6 +60,8 @@ Do not replace the signing keystore between releases. Use a new version such as 
    - `ANDROID_KEY_PASSWORD`: رمز کلید
 
 فایل keystore یا مقدار این Secretها را هرگز داخل مخزن، Issue، workflow، manifest یا پیام چت قرار ندهید.
+
+Workflow انتشار این مقادیر را فقط از GitHub Actions Secrets می‌خواند؛ فایل keystore هرگز به مخزن یا خود Release اضافه نمی‌شود.
 
 ## انتشار نسخه
 
