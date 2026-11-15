@@ -1,6 +1,6 @@
 # MikroLink Android
 
-Android 8.0 (API 26) is the minimum supported OS. Open this directory in Android Studio with Android SDK 35 and JDK 17, then run `:app:assembleDebug`. The build needs access to Google Maven and Maven Central. A debug APK has now been built at `app/build/outputs/apk/debug/app-debug.apk`; it is a debug-signed development artifact and has not been tested on a physical Android device.
+Android 8.0 (API 26) is the minimum supported OS. Open this directory in Android Studio with Android SDK 35 and JDK 17, then run `:app:assembleDebug` after running `scripts/prepare-strongswan.sh`. The build needs access to Google Maven and Maven Central. APKs are intentionally not stored in Git; GitHub Actions produces architecture-specific artifacts for CI and releases.
 
 ## Implemented connection paths
 
