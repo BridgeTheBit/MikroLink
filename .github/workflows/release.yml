@@ -1,0 +1,303 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        default: 0.1.0
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      image: ${{ steps.version.outputs.image }}
+    steps:
+      - id: version
+        name: Read release version
+        shell: bash
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$MANUAL_VERSION"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must be semantic, for example 0.1.0" >&2
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$version"
+          version_code=$((major * 1000000 + minor * 1000 + patch))
+          (( version_code > 0 && version_code <= 2100000000 )) || { echo "Version produces an invalid Android versionCode" >&2; exit 1; }
+          owner="$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${owner}/mikrolink-control-plane" >> "$GITHUB_OUTPUT"
+
+  verify:
+    name: Tests
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node --test server/test/config.test.js server/test/service.test.js deploy/generate-routeros.test.mjs
+
+  native-prep:
+    name: Prepare pinned strongSwan engine
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+      - name: Install native build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes autoconf automake libtool make perl jq
+          sdkmanager 'ndk;27.3.13750724'
+      - name: Prepare verified native source and OpenSSL libraries
+        shell: bash
+        run: |
+          export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.3.13750724"
+          bash scripts/prepare-strongswan.sh
+      - name: Package prepared engine
+        shell: bash
+        run: |
+          mkdir -p dist-native
+          tar --exclude='native/vendor/strongswan/.git' -czf dist-native/strongswan-prepared.tar.gz native/vendor/strongswan
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mikrolink-strongswan-prepared-${{ github.sha }}
+          path: dist-native/strongswan-prepared.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  android:
+    name: Android ${{ matrix.arch }}
+    needs: [prepare, verify, native-prep]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64-v8a
+            abi: arm64-v8a
+          - arch: armeabi-v7a
+            abi: armeabi-v7a
+          - arch: x86_64
+            abi: x86_64
+          - arch: universal
+            abi: ""
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: mikrolink-strongswan-prepared-${{ github.sha }}
+          path: .native-artifact
+      - name: Restore prepared strongSwan engine
+        shell: bash
+        run: tar -xzf .native-artifact/strongswan-prepared.tar.gz -C .
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK components
+        shell: bash
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.3.13750724'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.10.2
+      - name: Prepare release signing key
+        shell: bash
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in SIGNING_KEY_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [[ -n "${!value}" ]] || { echo "Missing required Android signing secret: $value" >&2; exit 1; }
+          done
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/mikrolink-release.jks"
+      - name: Build signed architecture APK
+        shell: bash
+        env:
+          ABI: ${{ matrix.abi }}
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
+          MIKROLINK_KEYSTORE_PATH: ${{ runner.temp }}/mikrolink-release.jks
+          MIKROLINK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MIKROLINK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MIKROLINK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          args=(--no-daemon -p android assembleRelease "-PmikrolinkVersion=${VERSION}" "-PmikrolinkVersionCode=${VERSION_CODE}")
+          if [[ -n "$ABI" ]]; then args+=("-PtargetAbi=${ABI}"); fi
+          gradle "${args[@]}"
+          mkdir -p dist
+          output="dist/MikroLink-${VERSION}-android-${ARCH}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$output"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$output"
+          filename="$(basename "$output")"
+          (cd dist && sha256sum "$filename" > "${filename}.sha256")
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: MikroLink-${{ needs.prepare.outputs.version }}-android-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  routeros-archive:
+    name: RouterOS ${{ matrix.arch }}
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            platform: linux/amd64
+          - arch: arm64
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build RouterOS-compatible image archive
+        shell: bash
+        env:
+          ARCH: ${{ matrix.arch }}
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          output="dist/MikroLink-${VERSION}-routeros-${ARCH}.tar"
+          docker buildx build \
+            --platform "$PLATFORM" \
+            --label "org.opencontainers.image.title=MikroLink control plane" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --output "type=docker,dest=$output" \
+            server
+          filename="$(basename "$output")"
+          (cd dist && sha256sum "$filename" > "${filename}.sha256")
+      - name: Upload RouterOS image archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: MikroLink-${{ needs.prepare.outputs.version }}-routeros-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-container:
+    name: Publish multi-architecture image
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        name: Build and publish image, provenance, and SBOM
+        uses: docker/build-push-action@v7
+        with:
+          context: server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ needs.prepare.outputs.image }}:${{ needs.prepare.outputs.version }}
+            ${{ needs.prepare.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.title=MikroLink control plane
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          provenance: mode=max
+          sbom: true
+      - name: Attest container provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ needs.prepare.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    name: Publish GitHub Release
+    needs: [prepare, android, routeros-archive, publish-container]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: MikroLink-${{ needs.prepare.outputs.version }}-*
+          path: dist
+          merge-multiple: true
+      - name: Create checksums and release notes
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            find . -maxdepth 1 -type f ! -name '*.sha256' ! -name 'SHA256SUMS' -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
+          )
+          sed "s/{{VERSION}}/$VERSION/g" .github/release-body.md > "$RUNNER_TEMP/release-body.md"
+      - name: Create or update release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --clobber
+            gh release edit "$tag" --title "MikroLink $VERSION" --notes-file "$RUNNER_TEMP/release-body.md"
+          else
+            gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "MikroLink $VERSION" --notes-file "$RUNNER_TEMP/release-body.md"
+          fi
+

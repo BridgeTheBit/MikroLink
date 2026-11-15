@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MikroLink</string>
+    <string name="vpn_channel_name">اتصال VPN</string>
+    <string name="vpn_notification_title">MikroLink</string>
+    <string name="vpn_notification_text">تونل امن فعال است</string>
+</resources>

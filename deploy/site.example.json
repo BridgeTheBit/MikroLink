@@ -1,0 +1,14 @@
+{
+  "publicHost": "vpn.example.com",
+  "containerImage": "ghcr.io/your-org/mikrolink-server:1.0.0",
+  "disk": "disk1",
+  "routerOsUser": "mikrolink-api",
+  "routerOsPassword": "REPLACE_WITH_A_UNIQUE_32_CHARACTER_SECRET",
+  "adminKey": "REPLACE_WITH_A_DIFFERENT_32_CHARACTER_SECRET",
+  "tokenSecret": "REPLACE_WITH_ANOTHER_UNIQUE_32_CHARACTER_SECRET",
+  "radiusSecret": "REPLACE_WITH_A_FOURTH_UNIQUE_32_CHARACTER_SECRET",
+  "wgPort": 51820,
+  "wgDns": "1.1.1.1",
+  "ovpnPort": 1194,
+  "ovpnTransport": "tcp"
+}

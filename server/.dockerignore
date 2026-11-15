@@ -1,0 +1,8 @@
+# Keep runtime images reproducible and prevent local credentials/state entering the build context.
+*
+!Dockerfile
+!package.json
+!src/
+!src/**
+!certs/
+!certs/**

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mikrolink_ink">#F4F8FF</color>
+    <color name="mikrolink_muted">#9EB2C9</color>
+    <color name="mikrolink_navy">#071421</color>
+    <color name="mikrolink_navy_deep">#030A12</color>
+    <color name="mikrolink_surface">#13283A</color>
+    <color name="mikrolink_accent">#2DE2C5</color>
+    <color name="mikrolink_blue">#5B8CFF</color>
+    <color name="mikrolink_violet">#8A6CFF</color>
+    <color name="mikrolink_error">#FF718B</color>
+    <color name="mikrolink_icon_background">#091A2C</color>
+</resources>

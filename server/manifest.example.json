@@ -1,0 +1,18 @@
+{
+  "configs": [
+    { "id": "wg-main", "name": "WireGuard", "protocol": "wireguard", "description": "Fast tunnel" },
+    { "id": "ovpn-main", "name": "OpenVPN", "protocol": "openvpn", "description": "TCP tunnel" },
+    { "id": "ike-main", "name": "IKEv2", "protocol": "ikev2", "description": "IPsec tunnel" }
+  ],
+  "users": [
+    {
+      "username": "sample-user",
+      "password": "REPLACE_WITH_A_LONG_RANDOM_PASSWORD",
+      "enabled": false,
+      "maxConnections": 2,
+      "quotaBytes": 5368709120,
+      "expiresAt": null,
+      "allowedConfigs": ["wg-main", "ovpn-main", "ike-main"]
+    }
+  ]
+}

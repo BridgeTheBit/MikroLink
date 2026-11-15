@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application>
+        <!-- These activities are internal.  They provide notification and
+             consent targets required by the upstream strongSwan service, but
+             do not add a second launcher to MikroLink. -->
+        <activity
+            android:name="org.strongswan.android.ui.MainActivity"
+            android:exported="false" />
+        <activity
+            android:name="org.strongswan.android.ui.VpnProfileControlActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/TransparentActivity" />
+        <activity
+            android:name="org.strongswan.android.ui.LogActivity"
+            android:exported="false" />
+        <activity
+            android:name="org.strongswan.android.ui.RemediationInstructionsActivity"
+            android:exported="false" />
+
+        <service
+            android:name="org.strongswan.android.logic.VpnStateService"
+            android:exported="false" />
+        <service
+            android:name="org.strongswan.android.logic.CharonVpnService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Embedded IKEv2/IPsec tunnel" />
+        </service>
+    </application>
+</manifest>

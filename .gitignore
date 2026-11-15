@@ -1,0 +1,45 @@
+# Local deployment credentials and generated RouterOS scripts
+deploy/site.json
+deploy/*.rsc
+deploy/*.secrets.json
+server/data/
+server/.env
+server/manifest.json
+server/state.json
+.env
+.env.*
+!.env.example
+secrets.properties
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+
+# Android builds and local tooling
+.local-tools/
+android/.gradle/
+android/local.properties
+android/**/build/
+**/.gradle/
+**/build/
+build/
+dist/
+out/
+release/
+*.apk
+*.aab
+*.apks
+*.aar
+
+# Upstream sources are fetched at pinned revisions by CI scripts
+native/vendor/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+*.log
+.DS_Store
+Thumbs.db
