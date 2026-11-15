@@ -17,6 +17,7 @@ ABIS="${ABIS:-armeabi-v7a arm64-v8a x86 x86_64}"
 
 mkdir -p "$(dirname "${STRONGSWAN_DIR}")" "${DEPS_DIR}"
 
+strongswan_fresh=0
 if [[ ! -d "${STRONGSWAN_DIR}/.git" ]]; then
     if [[ -e "${STRONGSWAN_DIR}" ]]; then
         echo "${STRONGSWAN_DIR} exists but is not a Git checkout" >&2
@@ -24,16 +25,18 @@ if [[ ! -d "${STRONGSWAN_DIR}/.git" ]]; then
     fi
     git clone --filter=blob:none --no-checkout \
         https://github.com/strongswan/strongswan.git "${STRONGSWAN_DIR}"
+    strongswan_fresh=1
 fi
 
-if ! git -C "${STRONGSWAN_DIR}" diff --quiet || \
-   ! git -C "${STRONGSWAN_DIR}" diff --cached --quiet; then
+if [[ "${strongswan_fresh}" == "0" ]] && { ! git -C "${STRONGSWAN_DIR}" diff --quiet || \
+   ! git -C "${STRONGSWAN_DIR}" diff --cached --quiet; }; then
     echo "Refusing to overwrite local strongSwan changes" >&2
     exit 1
 fi
 git -C "${STRONGSWAN_DIR}" fetch --depth 1 origin "${STRONGSWAN_COMMIT}"
 git -C "${STRONGSWAN_DIR}" checkout --detach "${STRONGSWAN_COMMIT}"
 
+openssl_fresh=0
 if [[ ! -d "${OPENSSL_DIR}/.git" ]]; then
     if [[ -e "${OPENSSL_DIR}" ]]; then
         echo "${OPENSSL_DIR} exists but is not a Git checkout" >&2
@@ -41,9 +44,10 @@ if [[ ! -d "${OPENSSL_DIR}/.git" ]]; then
     fi
     git clone --filter=blob:none --no-checkout \
         https://github.com/openssl/openssl.git "${OPENSSL_DIR}"
+    openssl_fresh=1
 fi
-if ! git -C "${OPENSSL_DIR}" diff --quiet || \
-   ! git -C "${OPENSSL_DIR}" diff --cached --quiet; then
+if [[ "${openssl_fresh}" == "0" ]] && { ! git -C "${OPENSSL_DIR}" diff --quiet || \
+   ! git -C "${OPENSSL_DIR}" diff --cached --quiet; }; then
     echo "Refusing to overwrite local OpenSSL changes" >&2
     exit 1
 fi
