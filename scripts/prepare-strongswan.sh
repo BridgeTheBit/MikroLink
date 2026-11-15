@@ -36,6 +36,13 @@ fi
 git -C "${STRONGSWAN_DIR}" fetch --depth 1 origin "${STRONGSWAN_COMMIT}"
 git -C "${STRONGSWAN_DIR}" checkout --detach "${STRONGSWAN_COMMIT}"
 
+# The pinned upstream app targets a newer AndroidX Core than this project’s
+# AGP/compileSdk baseline.  MikroLink does not ship the upstream UI, but a few
+# UI classes are referenced by CharonVpnService; use the equivalent API present
+# in Core 1.15 so the complete source tree remains compilable on API 35.
+find "${STRONGSWAN_DIR}/src/frontends/android/app/src/main/java" -type f -name '*.java' -print0 \
+    | xargs -0 sed -i 's/WindowCompat\.enableEdgeToEdge(getWindow());/WindowCompat.setDecorFitsSystemWindows(getWindow(), false);/g'
+
 openssl_fresh=0
 if [[ ! -d "${OPENSSL_DIR}/.git" ]]; then
     if [[ -e "${OPENSSL_DIR}" ]]; then
